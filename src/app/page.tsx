@@ -1,7 +1,9 @@
 
 "use client";
 
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
+import { useRouter } from 'next/navigation';
+import { useAuth } from '@/contexts/AuthContext';
 import { AppHeader } from '@/components/AppHeader';
 import { InvoiceUploadForm } from '@/components/InvoiceUploadForm';
 import { InvoiceDataDisplay } from '@/components/InvoiceDataDisplay';
@@ -11,12 +13,21 @@ import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
 import { Loader2, AlertTriangle } from 'lucide-react';
 
 export default function HomePage() {
+  const { user, loading: authLoading } = useAuth();
+  const router = useRouter();
+
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [extractedData, setExtractedData] = useState<ExtractInvoiceDataOutput | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading] = useState(false); // For invoice processing
   const [error, setError] = useState<string | null>(null);
   const [firestoreDocumentId, setFirestoreDocumentId] = useState<string | null>(null);
   const [fileDownloadUrl, setFileDownloadUrl] = useState<string | null>(null);
+
+  useEffect(() => {
+    if (!authLoading && !user) {
+      router.push('/login');
+    }
+  }, [user, authLoading, router]);
 
   const handleExtractionSuccess = (
     data: ExtractInvoiceDataOutput, 
@@ -33,6 +44,25 @@ export default function HomePage() {
   const handleDataUpdate = (updatedData: ExtractInvoiceDataOutput) => {
     setExtractedData(updatedData);
   };
+
+  if (authLoading || !user) {
+    return (
+      <div className="flex flex-col items-center justify-center min-h-screen bg-background text-foreground">
+        <AppHeader />
+        <main className="flex-grow container mx-auto flex items-center justify-center">
+            <div className="text-center">
+                <Loader2 className="h-12 w-12 text-primary animate-spin mx-auto" />
+                <p className="mt-4 text-muted-foreground">
+                    {authLoading ? "Authenticating..." : "Redirecting..."}
+                </p>
+            </div>
+        </main>
+         <footer className="py-6 text-center text-sm text-muted-foreground">
+            <p>&copy; {new Date().getFullYear()} ParseMyBill. All rights reserved.</p>
+         </footer>
+      </div>
+    );
+  }
 
   return (
     <div className="flex flex-col min-h-screen bg-background text-foreground">
@@ -94,4 +124,3 @@ export default function HomePage() {
     </div>
   );
 }
-
