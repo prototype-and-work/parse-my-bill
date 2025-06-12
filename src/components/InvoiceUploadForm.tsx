@@ -1,3 +1,4 @@
+
 "use client";
 
 import type { ChangeEvent } from "react";
@@ -8,10 +9,11 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { UploadCloud, Loader2 } from "lucide-react";
 import { extractInvoiceData, type ExtractInvoiceDataOutput } from '@/ai/flows/extract-invoice-data';
+import { saveInitialInvoice } from '@/services/invoiceService';
 import { useToast } from "@/hooks/use-toast";
 
 interface InvoiceUploadFormProps {
-  onExtractionSuccess: (data: ExtractInvoiceDataOutput, file: File) => void;
+  onExtractionSuccess: (data: ExtractInvoiceDataOutput, file: File, documentId: string) => void;
   setGlobalLoading: (loading: boolean) => void;
   setGlobalError: (error: string | null) => void;
 }
@@ -37,7 +39,7 @@ export function InvoiceUploadForm({ onExtractionSuccess, setGlobalLoading, setGl
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files[0]) {
       setSelectedFile(event.target.files[0]);
-      setGlobalError(null); // Clear previous errors on new file selection
+      setGlobalError(null); 
     }
   };
 
@@ -58,18 +60,21 @@ export function InvoiceUploadForm({ onExtractionSuccess, setGlobalLoading, setGl
 
     try {
       const invoiceDataUri = await fileToDataUri(selectedFile);
-      const extractedData = await extractInvoiceData({ invoiceDataUri });
-      onExtractionSuccess(extractedData, selectedFile);
+      const extractedDataResponse = await extractInvoiceData({ invoiceDataUri });
+      
+      const documentId = await saveInitialInvoice(extractedDataResponse, selectedFile.name);
+      
+      onExtractionSuccess(extractedDataResponse, selectedFile, documentId);
       toast({
-        title: "Extraction Successful",
-        description: "Invoice data has been extracted.",
+        title: "Extraction & Save Successful",
+        description: "Invoice data extracted and saved to Firestore.",
       });
     } catch (error) {
-      console.error("Extraction failed:", error);
-      const errorMessage = error instanceof Error ? error.message : "An unknown error occurred during extraction.";
-      setGlobalError(`Extraction failed: ${errorMessage}`);
+      console.error("Operation failed:", error);
+      const errorMessage = error instanceof Error ? error.message : "An unknown error occurred during processing or saving.";
+      setGlobalError(`Operation failed: ${errorMessage}`);
       toast({
-        title: "Extraction Failed",
+        title: "Operation Failed",
         description: errorMessage,
         variant: "destructive",
       });
@@ -83,7 +88,7 @@ export function InvoiceUploadForm({ onExtractionSuccess, setGlobalLoading, setGl
     <Card className="shadow-lg">
       <CardHeader>
         <CardTitle className="font-headline text-xl">Upload Invoice</CardTitle>
-        <CardDescription>Upload your invoice (PDF or image) to extract data automatically.</CardDescription>
+        <CardDescription>Upload your invoice (PDF or image) to extract and save data automatically.</CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-6">
@@ -105,12 +110,12 @@ export function InvoiceUploadForm({ onExtractionSuccess, setGlobalLoading, setGl
             {isProcessing ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Processing...
+                Processing & Saving...
               </>
             ) : (
               <>
                 <UploadCloud className="mr-2 h-4 w-4" />
-                Extract Data
+                Extract & Save Data
               </>
             )}
           </Button>

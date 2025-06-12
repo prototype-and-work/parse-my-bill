@@ -1,8 +1,10 @@
+
 "use client";
 
 import type { ChangeEvent } from "react";
 import { useState, useEffect } from 'react';
 import type { ExtractInvoiceDataOutput } from '@/ai/flows/extract-invoice-data';
+import { updateInvoiceInFirestore } from '@/services/invoiceService';
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
@@ -17,9 +19,10 @@ interface InvoiceDataDisplayProps {
   initialData: ExtractInvoiceDataOutput;
   onDataUpdate: (updatedData: ExtractInvoiceDataOutput) => void;
   uploadedFileName?: string;
+  firestoreDocumentId: string | null;
 }
 
-export function InvoiceDataDisplay({ initialData, onDataUpdate, uploadedFileName }: InvoiceDataDisplayProps) {
+export function InvoiceDataDisplay({ initialData, onDataUpdate, uploadedFileName, firestoreDocumentId }: InvoiceDataDisplayProps) {
   const [editableData, setEditableData] = useState<ExtractInvoiceDataOutput>(initialData);
   const { toast } = useToast();
 
@@ -45,12 +48,31 @@ export function InvoiceDataDisplay({ initialData, onDataUpdate, uploadedFileName
   };
 
 
-  const handleSaveChanges = () => {
-    onDataUpdate(editableData);
-    toast({
-      title: "Data Updated",
-      description: "Invoice details have been locally updated. (Simulated Save)",
-    });
+  const handleSaveChanges = async () => {
+    if (!firestoreDocumentId) {
+      toast({
+        title: "Error",
+        description: "No Document ID found. Cannot save changes to Firestore.",
+        variant: "destructive",
+      });
+      return;
+    }
+    try {
+      await updateInvoiceInFirestore(firestoreDocumentId, editableData);
+      onDataUpdate(editableData);
+      toast({
+        title: "Data Updated & Saved",
+        description: "Invoice details have been updated and saved to Firestore.",
+      });
+    } catch (error) {
+      console.error("Failed to save changes to Firestore:", error);
+      const errorMessage = error instanceof Error ? error.message : "An unknown error occurred.";
+      toast({
+        title: "Save Failed",
+        description: `Could not save changes to Firestore: ${errorMessage}`,
+        variant: "destructive",
+      });
+    }
   };
 
   return (
@@ -165,9 +187,9 @@ export function InvoiceDataDisplay({ initialData, onDataUpdate, uploadedFileName
 
       </CardContent>
       <CardFooter>
-        <Button onClick={handleSaveChanges} className="w-full md:w-auto ml-auto bg-primary text-primary-foreground hover:bg-primary/90">
+        <Button onClick={handleSaveChanges} className="w-full md:w-auto ml-auto bg-primary text-primary-foreground hover:bg-primary/90" disabled={!firestoreDocumentId}>
           <Save className="mr-2 h-4 w-4" />
-          Update & Simulate Save
+          Update & Save to Cloud
         </Button>
       </CardFooter>
     </Card>

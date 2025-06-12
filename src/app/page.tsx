@@ -1,3 +1,4 @@
+
 "use client";
 
 import { useState } from 'react';
@@ -14,10 +15,12 @@ export default function HomePage() {
   const [extractedData, setExtractedData] = useState<ExtractInvoiceDataOutput | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
+  const [firestoreDocumentId, setFirestoreDocumentId] = useState<string | null>(null);
 
-  const handleExtractionSuccess = (data: ExtractInvoiceDataOutput, file: File) => {
+  const handleExtractionSuccess = (data: ExtractInvoiceDataOutput, file: File, documentId: string) => {
     setExtractedData(data);
     setUploadedFile(file);
+    setFirestoreDocumentId(documentId);
     setError(null);
   };
 
@@ -39,11 +42,11 @@ export default function HomePage() {
           <Card className="shadow-md animate-pulse">
             <CardHeader>
               <CardTitle className="font-headline text-xl">Processing Invoice</CardTitle>
-              <CardDescription>AI is extracting data, please wait...</CardDescription>
+              <CardDescription>AI is extracting data and saving to cloud, please wait...</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col items-center justify-center h-40">
               <Loader2 className="h-12 w-12 text-primary animate-spin" />
-              <p className="mt-4 text-muted-foreground">Extracting data...</p>
+              <p className="mt-4 text-muted-foreground">Processing...</p>
             </CardContent>
           </Card>
         )}
@@ -56,11 +59,12 @@ export default function HomePage() {
           </Alert>
         )}
 
-        {extractedData && !isLoading && !error && (
+        {extractedData && firestoreDocumentId && !isLoading && !error && (
           <InvoiceDataDisplay
             initialData={extractedData}
             onDataUpdate={handleDataUpdate}
             uploadedFileName={uploadedFile?.name}
+            firestoreDocumentId={firestoreDocumentId}
           />
         )}
 
@@ -78,7 +82,7 @@ export default function HomePage() {
       </main>
       <footer className="py-6 text-center text-sm text-muted-foreground">
         <p>&copy; {new Date().getFullYear()} ParseMyBill. All rights reserved.</p>
-        <p className="text-xs mt-1">Authentication and cloud storage features are simulated for this demo.</p>
+        <p className="text-xs mt-1">Data is saved to Cloud Firestore. File uploads to cloud storage are not implemented in this demo.</p>
       </footer>
     </div>
   );
