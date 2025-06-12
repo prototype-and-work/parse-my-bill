@@ -11,6 +11,7 @@ import { UploadCloud, Loader2 } from "lucide-react";
 import { extractInvoiceData, type ExtractInvoiceDataOutput } from '@/ai/flows/extract-invoice-data';
 import { saveInitialInvoice } from '@/services/invoiceService';
 import { useToast } from "@/hooks/use-toast";
+import { useAuth } from "@/contexts/AuthContext"; // Import useAuth
 
 interface InvoiceUploadFormProps {
   onExtractionSuccess: (
@@ -39,6 +40,7 @@ export function InvoiceUploadForm({ onExtractionSuccess, setGlobalLoading, setGl
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const { toast } = useToast();
+  const { user } = useAuth(); // Get the authenticated user
 
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files[0]) {
@@ -58,6 +60,16 @@ export function InvoiceUploadForm({ onExtractionSuccess, setGlobalLoading, setGl
       return;
     }
 
+    if (!user || !user.uid) { // Check if user is available
+      toast({
+        title: "Authentication Error",
+        description: "You must be logged in to upload an invoice.",
+        variant: "destructive",
+      });
+      setGlobalError("User not authenticated.");
+      return;
+    }
+
     setIsProcessing(true);
     setGlobalLoading(true);
     setGlobalError(null);
@@ -66,8 +78,8 @@ export function InvoiceUploadForm({ onExtractionSuccess, setGlobalLoading, setGl
       const invoiceDataUri = await fileToDataUri(selectedFile);
       const extractedDataResponse = await extractInvoiceData({ invoiceDataUri });
       
-      // saveInitialInvoice now handles file upload and returns id, downloadUrl, filePath
-      const saveResult = await saveInitialInvoice(extractedDataResponse, selectedFile);
+      // Pass user.uid to saveInitialInvoice
+      const saveResult = await saveInitialInvoice(extractedDataResponse, selectedFile, user.uid);
       
       onExtractionSuccess(extractedDataResponse, selectedFile, saveResult);
       toast({
@@ -111,7 +123,7 @@ export function InvoiceUploadForm({ onExtractionSuccess, setGlobalLoading, setGl
               Supported formats: PDF, PNG, JPG, GIF. Max file size: 10MB.
             </p>
           </div>
-          <Button type="submit" disabled={isProcessing || !selectedFile} className="w-full bg-accent text-accent-foreground hover:bg-accent/90">
+          <Button type="submit" disabled={isProcessing || !selectedFile || !user} className="w-full bg-accent text-accent-foreground hover:bg-accent/90">
             {isProcessing ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
@@ -129,4 +141,3 @@ export function InvoiceUploadForm({ onExtractionSuccess, setGlobalLoading, setGl
     </Card>
   );
 }
-

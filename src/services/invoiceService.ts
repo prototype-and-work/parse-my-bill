@@ -1,7 +1,7 @@
 
 'use server';
 
-import { db, storage } from '@/config/firebase';
+import { db, storage, auth } from '@/config/firebase'; // auth import might not be directly used here but good for context
 import { collection, addDoc, doc, updateDoc, serverTimestamp, FieldValue } from 'firebase/firestore';
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage';
 import type { ExtractInvoiceDataOutput } from '@/ai/flows/extract-invoice-data';
@@ -9,6 +9,7 @@ import type { ExtractInvoiceDataOutput } from '@/ai/flows/extract-invoice-data';
 const INVOICES_COLLECTION = 'invoices';
 
 export interface StoredInvoiceData extends ExtractInvoiceDataOutput {
+  userId: string; // Added userId
   fileName: string;
   fileDownloadUrl: string;
   filePath: string; // Path in Firebase Storage
@@ -19,6 +20,7 @@ export interface StoredInvoiceData extends ExtractInvoiceDataOutput {
 // Interface for data read from Firestore (timestamps are resolved)
 export interface FetchedStoredInvoiceData extends ExtractInvoiceDataOutput {
   id: string;
+  userId: string; // Added userId
   fileName: string;
   fileDownloadUrl: string;
   filePath: string;
@@ -26,14 +28,13 @@ export interface FetchedStoredInvoiceData extends ExtractInvoiceDataOutput {
   updatedAt: Date; // Firebase Timestamps are converted to Date objects on read
 }
 
-async function uploadInvoiceFile(file: File, pathPrefix: string): Promise<{ downloadURL: string; filePath: string }> {
-  const uniqueFileName = `${pathPrefix}/${new Date().getTime()}_${file.name}`;
-  const fileReference = storageRef(storage, uniqueFileName);
+async function uploadInvoiceFile(file: File, fullPath: string): Promise<{ downloadURL: string; filePath: string }> {
+  const fileReference = storageRef(storage, fullPath);
 
   try {
     await uploadBytes(fileReference, file);
     const downloadURL = await getDownloadURL(fileReference);
-    return { downloadURL, filePath: uniqueFileName };
+    return { downloadURL, filePath: fullPath };
   } catch (e) {
     console.error('Error uploading file to Firebase Storage: ', e);
     if (e instanceof Error) {
@@ -45,13 +46,22 @@ async function uploadInvoiceFile(file: File, pathPrefix: string): Promise<{ down
 
 export async function saveInitialInvoice(
   extractedData: ExtractInvoiceDataOutput,
-  file: File
+  file: File,
+  userId: string // Added userId parameter
 ): Promise<{ id: string; fileDownloadUrl: string; filePath: string }> {
+  if (!userId) {
+    throw new Error('User ID is required to save an invoice.');
+  }
   try {
-    const { downloadURL, filePath } = await uploadInvoiceFile(file, 'invoices');
+    // Construct user-specific file path
+    const uniqueFileName = `${new Date().getTime()}_${file.name}`;
+    const fullStoragePath = `users/${userId}/invoices/${uniqueFileName}`;
+    
+    const { downloadURL, filePath } = await uploadInvoiceFile(file, fullStoragePath);
 
     const docData: Omit<StoredInvoiceData, 'createdAt' | 'updatedAt'> & { createdAt: FieldValue, updatedAt: FieldValue } = {
       ...extractedData,
+      userId: userId, // Store userId
       fileName: file.name,
       fileDownloadUrl: downloadURL,
       filePath: filePath,
@@ -73,9 +83,10 @@ export async function updateInvoiceInFirestore(
   documentId: string,
   dataToUpdate: Partial<ExtractInvoiceDataOutput>
 ): Promise<void> {
+  // Note: Firestore rules should protect this update based on userId in the document.
   try {
     const invoiceDocRef = doc(db, INVOICES_COLLECTION, documentId);
-    const updateData: Partial<StoredInvoiceData> & { updatedAt: FieldValue } = {
+    const updateData: Partial<Omit<StoredInvoiceData, 'userId' | 'fileName' | 'fileDownloadUrl' | 'filePath' | 'createdAt'>> & { updatedAt: FieldValue } = {
       ...dataToUpdate,
       updatedAt: serverTimestamp(),
     };
@@ -88,4 +99,3 @@ export async function updateInvoiceInFirestore(
     throw new Error('Failed to update invoice data in Firestore due to an unknown error.');
   }
 }
-
