@@ -16,11 +16,17 @@ export default function HomePage() {
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [firestoreDocumentId, setFirestoreDocumentId] = useState<string | null>(null);
+  const [fileDownloadUrl, setFileDownloadUrl] = useState<string | null>(null);
 
-  const handleExtractionSuccess = (data: ExtractInvoiceDataOutput, file: File, documentId: string) => {
+  const handleExtractionSuccess = (
+    data: ExtractInvoiceDataOutput, 
+    file: File, 
+    saveResult: { id: string; fileDownloadUrl: string; filePath: string; }
+  ) => {
     setExtractedData(data);
     setUploadedFile(file);
-    setFirestoreDocumentId(documentId);
+    setFirestoreDocumentId(saveResult.id);
+    setFileDownloadUrl(saveResult.fileDownloadUrl);
     setError(null);
   };
 
@@ -42,7 +48,7 @@ export default function HomePage() {
           <Card className="shadow-md animate-pulse">
             <CardHeader>
               <CardTitle className="font-headline text-xl">Processing Invoice</CardTitle>
-              <CardDescription>AI is extracting data and saving to cloud, please wait...</CardDescription>
+              <CardDescription>AI is extracting data, uploading file, and saving to cloud, please wait...</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col items-center justify-center h-40">
               <Loader2 className="h-12 w-12 text-primary animate-spin" />
@@ -65,6 +71,7 @@ export default function HomePage() {
             onDataUpdate={handleDataUpdate}
             uploadedFileName={uploadedFile?.name}
             firestoreDocumentId={firestoreDocumentId}
+            fileDownloadUrl={fileDownloadUrl ?? undefined}
           />
         )}
 
@@ -74,7 +81,7 @@ export default function HomePage() {
               <img src="https://placehold.co/300x200.png?text=Invoice+Illustration" alt="Invoice placeholder" data-ai-hint="invoice document" className="mx-auto mb-6 rounded-md opacity-70" />
               <h3 className="text-xl font-semibold text-muted-foreground font-headline">Ready to Parse</h3>
               <p className="text-muted-foreground mt-2">
-                Upload an invoice to get started. The extracted data will appear here.
+                Upload an invoice to get started. The extracted data and file link will appear here.
               </p>
             </CardContent>
           </Card>
@@ -82,8 +89,9 @@ export default function HomePage() {
       </main>
       <footer className="py-6 text-center text-sm text-muted-foreground">
         <p>&copy; {new Date().getFullYear()} ParseMyBill. All rights reserved.</p>
-        <p className="text-xs mt-1">Data is saved to Cloud Firestore. File uploads to cloud storage are not implemented in this demo.</p>
+        <p className="text-xs mt-1">Data is saved to Cloud Firestore. Files are uploaded to Firebase Cloud Storage.</p>
       </footer>
     </div>
   );
 }
+

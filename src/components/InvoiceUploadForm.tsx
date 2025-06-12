@@ -13,7 +13,11 @@ import { saveInitialInvoice } from '@/services/invoiceService';
 import { useToast } from "@/hooks/use-toast";
 
 interface InvoiceUploadFormProps {
-  onExtractionSuccess: (data: ExtractInvoiceDataOutput, file: File, documentId: string) => void;
+  onExtractionSuccess: (
+    data: ExtractInvoiceDataOutput, 
+    file: File, 
+    saveResult: { id: string; fileDownloadUrl: string; filePath: string; }
+  ) => void;
   setGlobalLoading: (loading: boolean) => void;
   setGlobalError: (error: string | null) => void;
 }
@@ -62,16 +66,17 @@ export function InvoiceUploadForm({ onExtractionSuccess, setGlobalLoading, setGl
       const invoiceDataUri = await fileToDataUri(selectedFile);
       const extractedDataResponse = await extractInvoiceData({ invoiceDataUri });
       
-      const documentId = await saveInitialInvoice(extractedDataResponse, selectedFile.name);
+      // saveInitialInvoice now handles file upload and returns id, downloadUrl, filePath
+      const saveResult = await saveInitialInvoice(extractedDataResponse, selectedFile);
       
-      onExtractionSuccess(extractedDataResponse, selectedFile, documentId);
+      onExtractionSuccess(extractedDataResponse, selectedFile, saveResult);
       toast({
-        title: "Extraction & Save Successful",
-        description: "Invoice data extracted and saved to Firestore.",
+        title: "Operation Successful",
+        description: "Invoice data extracted, file uploaded, and all saved to cloud.",
       });
     } catch (error) {
       console.error("Operation failed:", error);
-      const errorMessage = error instanceof Error ? error.message : "An unknown error occurred during processing or saving.";
+      const errorMessage = error instanceof Error ? error.message : "An unknown error occurred during processing, upload, or saving.";
       setGlobalError(`Operation failed: ${errorMessage}`);
       toast({
         title: "Operation Failed",
@@ -88,7 +93,7 @@ export function InvoiceUploadForm({ onExtractionSuccess, setGlobalLoading, setGl
     <Card className="shadow-lg">
       <CardHeader>
         <CardTitle className="font-headline text-xl">Upload Invoice</CardTitle>
-        <CardDescription>Upload your invoice (PDF or image) to extract and save data automatically.</CardDescription>
+        <CardDescription>Upload your invoice (PDF or image) to extract data, store the file, and save details automatically.</CardDescription>
       </CardHeader>
       <CardContent>
         <form onSubmit={handleSubmit} className="space-y-6">
@@ -110,12 +115,12 @@ export function InvoiceUploadForm({ onExtractionSuccess, setGlobalLoading, setGl
             {isProcessing ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Processing & Saving...
+                Processing, Uploading & Saving...
               </>
             ) : (
               <>
                 <UploadCloud className="mr-2 h-4 w-4" />
-                Extract & Save Data
+                Extract, Upload & Save Data
               </>
             )}
           </Button>
@@ -124,3 +129,4 @@ export function InvoiceUploadForm({ onExtractionSuccess, setGlobalLoading, setGl
     </Card>
   );
 }
+

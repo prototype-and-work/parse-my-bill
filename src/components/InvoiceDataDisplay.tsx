@@ -11,7 +11,7 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle, CardFooter } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/components/ui/accordion";
-import { FileText, CalendarDays, CircleDollarSign, Save, FileJson2 } from "lucide-react";
+import { FileText, CalendarDays, CircleDollarSign, Save, FileJson2, ExternalLink } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Textarea } from "@/components/ui/textarea";
 
@@ -20,9 +20,10 @@ interface InvoiceDataDisplayProps {
   onDataUpdate: (updatedData: ExtractInvoiceDataOutput) => void;
   uploadedFileName?: string;
   firestoreDocumentId: string | null;
+  fileDownloadUrl?: string;
 }
 
-export function InvoiceDataDisplay({ initialData, onDataUpdate, uploadedFileName, firestoreDocumentId }: InvoiceDataDisplayProps) {
+export function InvoiceDataDisplay({ initialData, onDataUpdate, uploadedFileName, firestoreDocumentId, fileDownloadUrl }: InvoiceDataDisplayProps) {
   const [editableData, setEditableData] = useState<ExtractInvoiceDataOutput>(initialData);
   const { toast } = useToast();
 
@@ -79,7 +80,21 @@ export function InvoiceDataDisplay({ initialData, onDataUpdate, uploadedFileName
     <Card className="shadow-lg">
       <CardHeader>
         <CardTitle className="font-headline text-xl">Extracted Invoice Data</CardTitle>
-        {uploadedFileName && <CardDescription>Showing data for: {uploadedFileName}</CardDescription>}
+        {uploadedFileName && (
+          <CardDescription className="flex flex-col sm:flex-row sm:items-center sm:justify-between">
+            <span>Showing data for: {uploadedFileName}</span>
+            {fileDownloadUrl && (
+              <a
+                href={fileDownloadUrl}
+                target="_blank"
+                rel="noopener noreferrer"
+                className="text-sm text-primary hover:underline mt-1 sm:mt-0 flex items-center"
+              >
+                View Uploaded File <ExternalLink className="ml-1 h-4 w-4" />
+              </a>
+            )}
+          </CardDescription>
+        )}
       </CardHeader>
       <CardContent className="space-y-6">
         <div>
@@ -195,3 +210,4 @@ export function InvoiceDataDisplay({ initialData, onDataUpdate, uploadedFileName
     </Card>
   );
 }
+
