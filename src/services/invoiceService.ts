@@ -62,18 +62,21 @@ export async function saveInvoiceMetadata(
   }
 
   try {
+    // Construct docData ensuring undefined fields from extractedData are omitted
     const docData: StoredInvoiceData = {
       userId: userId,
       fileName: fileName,
       fileDownloadUrl: fileDownloadUrl,
       filePath: filePath,
-      invoiceNumber: extractedData.invoiceNumber,
-      invoiceDate: extractedData.invoiceDate,
-      lineItems: extractedData.lineItems,
-      totalAmount: extractedData.totalAmount,
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
+      // Conditionally add optional fields only if they are defined
+      ...(extractedData.invoiceNumber !== undefined && { invoiceNumber: extractedData.invoiceNumber }),
+      ...(extractedData.invoiceDate !== undefined && { invoiceDate: extractedData.invoiceDate }),
+      ...(extractedData.lineItems !== undefined && { lineItems: extractedData.lineItems }),
+      ...(extractedData.totalAmount !== undefined && { totalAmount: extractedData.totalAmount }),
     };
+
     console.log('[invoiceService] Document data to be saved:', JSON.stringify(docData, null, 2));
 
     const docRef = await addDoc(collection(db, INVOICES_COLLECTION), docData);
@@ -96,13 +99,14 @@ export async function updateInvoiceInFirestore(
   console.log('[invoiceService] Data to update:', JSON.stringify(dataToUpdate, null, 2));
   try {
     const invoiceDocRef = doc(db, INVOICES_COLLECTION, documentId);
-    const updatePayload: Partial<Omit<StoredInvoiceData, 'userId' | 'fileName' | 'fileDownloadUrl' | 'filePath' | 'createdAt'>> & { updatedAt: FieldValue } = {
-        ...(dataToUpdate.invoiceNumber && { invoiceNumber: dataToUpdate.invoiceNumber }),
-        ...(dataToUpdate.invoiceDate && { invoiceDate: dataToUpdate.invoiceDate }),
-        ...(dataToUpdate.lineItems && { lineItems: dataToUpdate.lineItems }),
-        ...(dataToUpdate.totalAmount !== undefined && { totalAmount: dataToUpdate.totalAmount }),
-        updatedAt: serverTimestamp(),
-    };
+    
+    // Construct the update payload, ensuring undefined values are not sent
+    const updatePayload: { [key: string]: any } = { updatedAt: serverTimestamp() };
+    if (dataToUpdate.invoiceNumber !== undefined) updatePayload.invoiceNumber = dataToUpdate.invoiceNumber;
+    if (dataToUpdate.invoiceDate !== undefined) updatePayload.invoiceDate = dataToUpdate.invoiceDate;
+    if (dataToUpdate.lineItems !== undefined) updatePayload.lineItems = dataToUpdate.lineItems;
+    if (dataToUpdate.totalAmount !== undefined) updatePayload.totalAmount = dataToUpdate.totalAmount;
+
     await updateDoc(invoiceDocRef, updatePayload);
     console.log(`[invoiceService] Successfully updated document ${documentId} in Firestore.`);
   } catch (e) {
