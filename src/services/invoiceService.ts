@@ -3,31 +3,45 @@
 
 import { db } from '@/config/firebase';
 import { collection, addDoc, doc, updateDoc, serverTimestamp, FieldValue } from 'firebase/firestore';
-import type { ExtractInvoiceDataOutput } from '@/ai/flows/extract-invoice-data';
+// Use the potentially simplified ExtractInvoiceDataOutput for type consistency during debugging
+import type { ExtractInvoiceDataOutput } from '@/ai/flows/extract-invoice-data'; 
 
 const INVOICES_COLLECTION = 'invoices';
 
-export interface StoredInvoiceData extends ExtractInvoiceDataOutput {
+// Adjusted to reflect potentially simplified data during timeout debugging
+export interface StoredInvoiceData {
   userId: string;
   fileName: string;
   fileDownloadUrl: string;
   filePath: string; 
   createdAt: FieldValue; 
   updatedAt: FieldValue; 
+  // Fields from ExtractInvoiceDataOutput (simplified)
+  invoiceNumber?: string;
+  invoiceDate?: string; // Keep as optional for now as it might be removed in simplified schema
+  lineItems?: { description: string; amount: number }[]; // Keep as optional
+  totalAmount?: number;
 }
 
-export interface FetchedStoredInvoiceData extends ExtractInvoiceDataOutput {
+// Adjusted FetchedStoredInvoiceData
+export interface FetchedStoredInvoiceData {
   id: string;
   userId: string;
-  fileName: string;
+  fileName:string;
   fileDownloadUrl: string;
   filePath: string;
   createdAt: Date; 
-  updatedAt: Date; 
+  updatedAt: Date;
+  // Fields from ExtractInvoiceDataOutput (simplified)
+  invoiceNumber?: string;
+  invoiceDate?: string;
+  lineItems?: { description: string; amount: number }[];
+  totalAmount?: number;
 }
 
+
 interface SaveInvoiceMetadataParams {
-  extractedData: ExtractInvoiceDataOutput;
+  extractedData: ExtractInvoiceDataOutput; // This will be the simplified version
   fileName: string;
   fileDownloadUrl: string;
   filePath: string;
@@ -42,7 +56,8 @@ export async function saveInvoiceMetadata(
   console.log('[invoiceService] Input - FileName:', fileName);
   console.log('[invoiceService] Input - FileDownloadUrl:', fileDownloadUrl);
   console.log('[invoiceService] Input - FilePath:', filePath);
-  console.log('[invoiceService] Input - ExtractedData:', JSON.stringify(extractedData, null, 2));
+  // Log the simplified extractedData
+  console.log('[invoiceService] Input - ExtractedData (potentially simplified):', JSON.stringify(extractedData, null, 2));
 
 
   if (!userId) {
@@ -59,12 +74,16 @@ export async function saveInvoiceMetadata(
   }
 
   try {
-    const docData: Omit<StoredInvoiceData, 'createdAt' | 'updatedAt'> & { createdAt: FieldValue, updatedAt: FieldValue } = {
-      ...extractedData,
+    // Construct docData based on the simplified extractedData
+    const docData: Omit<StoredInvoiceData, 'createdAt' | 'updatedAt' | 'invoiceDate' | 'lineItems'> & { createdAt: FieldValue, updatedAt: FieldValue, invoiceDate?: string, lineItems?: any[] } = {
       userId: userId,
       fileName: fileName,
       fileDownloadUrl: fileDownloadUrl,
       filePath: filePath,
+      invoiceNumber: extractedData.invoiceNumber,
+      totalAmount: extractedData.totalAmount,
+      // invoiceDate: extractedData.invoiceDate, // Removed if not in simplified schema
+      // lineItems: extractedData.lineItems, // Removed if not in simplified schema
       createdAt: serverTimestamp(),
       updatedAt: serverTimestamp(),
     };
@@ -84,17 +103,21 @@ export async function saveInvoiceMetadata(
 
 export async function updateInvoiceInFirestore(
   documentId: string,
-  dataToUpdate: Partial<ExtractInvoiceDataOutput>
+  dataToUpdate: Partial<ExtractInvoiceDataOutput> // This is the simplified schema for now
 ): Promise<void> {
   console.log(`[invoiceService] Attempting to update document ${documentId} in Firestore.`);
-  console.log('[invoiceService] Data to update:', JSON.stringify(dataToUpdate, null, 2));
+  console.log('[invoiceService] Data to update (potentially simplified):', JSON.stringify(dataToUpdate, null, 2));
   try {
     const invoiceDocRef = doc(db, INVOICES_COLLECTION, documentId);
-    const updateData: Partial<Omit<StoredInvoiceData, 'userId' | 'fileName' | 'fileDownloadUrl' | 'filePath' | 'createdAt'>> & { updatedAt: FieldValue } = {
-      ...dataToUpdate,
-      updatedAt: serverTimestamp(),
+    // Ensure dataToUpdate aligns with StoredInvoiceData structure
+    const updatePayload: Partial<Omit<StoredInvoiceData, 'userId' | 'fileName' | 'fileDownloadUrl' | 'filePath' | 'createdAt'>> & { updatedAt: FieldValue } = {
+        ...(dataToUpdate.invoiceNumber && { invoiceNumber: dataToUpdate.invoiceNumber }),
+        // ...(dataToUpdate.invoiceDate && { invoiceDate: dataToUpdate.invoiceDate }),
+        // ...(dataToUpdate.lineItems && { lineItems: dataToUpdate.lineItems }),
+        ...(dataToUpdate.totalAmount !== undefined && { totalAmount: dataToUpdate.totalAmount }),
+        updatedAt: serverTimestamp(),
     };
-    await updateDoc(invoiceDocRef, updateData);
+    await updateDoc(invoiceDocRef, updatePayload);
     console.log(`[invoiceService] Successfully updated document ${documentId} in Firestore.`);
   } catch (e) {
     console.error(`[invoiceService] Error updating document ${documentId} in Firestore: `, e);

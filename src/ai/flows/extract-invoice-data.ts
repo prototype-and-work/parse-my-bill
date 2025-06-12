@@ -1,3 +1,4 @@
+
 'use server';
 
 /**
@@ -20,18 +21,20 @@ const ExtractInvoiceDataInputSchema = z.object({
 });
 export type ExtractInvoiceDataInput = z.infer<typeof ExtractInvoiceDataInputSchema>;
 
+// Temporarily simplified for debugging timeout
 const ExtractInvoiceDataOutputSchema = z.object({
-  invoiceNumber: z.string().describe('The invoice number.'),
-  invoiceDate: z.string().describe('The invoice date.'),
-  lineItems: z
-    .array(
-      z.object({
-        description: z.string().describe('Description of the line item.'),
-        amount: z.number().describe('The amount for the line item.'),
-      })
-    )
-    .describe('The line items in the invoice.'),
-  totalAmount: z.number().describe('The total amount due on the invoice.'),
+  invoiceNumber: z.string().optional().describe('The invoice number.'),
+  // invoiceDate: z.string().optional().describe('The invoice date.'),
+  // lineItems: z
+  //   .array(
+  //     z.object({
+  //       description: z.string().describe('Description of the line item.'),
+  //       amount: z.number().describe('The amount for the line item.'),
+  //     })
+  //   )
+  //   .optional()
+  //   .describe('The line items in the invoice.'),
+  totalAmount: z.number().optional().describe('The total amount due on the invoice.'),
 });
 export type ExtractInvoiceDataOutput = z.infer<typeof ExtractInvoiceDataOutputSchema>;
 
@@ -45,11 +48,8 @@ const prompt = ai.definePrompt({
   output: {schema: ExtractInvoiceDataOutputSchema},
   prompt: `You are an expert AI assistant specializing in extracting data from invoices.
 
-  Please extract the following information from the invoice document provided.
-
+  Please extract ONLY the following information from the invoice document provided:
   - Invoice Number
-  - Invoice Date
-  - Line Items (description and amount for each item)
   - Total Amount
 
   Return the extracted data in JSON format.
@@ -68,3 +68,4 @@ const extractInvoiceDataFlow = ai.defineFlow(
     return output!;
   }
 );
+

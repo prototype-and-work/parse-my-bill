@@ -122,7 +122,13 @@ export function InvoiceUploadForm({ onExtractionSuccess, setGlobalLoading, setGl
       toast({ title: "Step 3/3: Saving Data...", description: "Saving invoice details to the cloud." });
       
       const metadataToSave = {
-        extractedData: extractedDataResponse,
+        // Ensure this matches the potentially simplified ExtractInvoiceDataOutput
+        extractedData: {
+            invoiceNumber: extractedDataResponse.invoiceNumber ?? "N/A",
+            // invoiceDate: extractedDataResponse.invoiceDate ?? "N/A", // Temporarily removed
+            // lineItems: extractedDataResponse.lineItems ?? [], // Temporarily removed
+            totalAmount: extractedDataResponse.totalAmount ?? 0,
+        },
         fileName: selectedFile.name,
         fileDownloadUrl: uploadResult.downloadURL,
         filePath: uploadResult.filePath,
@@ -134,6 +140,7 @@ export function InvoiceUploadForm({ onExtractionSuccess, setGlobalLoading, setGl
       console.log('[InvoiceUploadForm] Step 3/3: Firestore save result:', firestoreSaveResult);
       
       if (firestoreSaveResult && firestoreSaveResult.id) {
+        // Pass the original extractedDataResponse which might be simplified
         onExtractionSuccess(extractedDataResponse, selectedFile, { id: firestoreSaveResult.id, fileDownloadUrl: uploadResult.downloadURL, filePath: uploadResult.filePath });
         toast({
           title: "Operation Successful",
@@ -152,7 +159,10 @@ export function InvoiceUploadForm({ onExtractionSuccess, setGlobalLoading, setGl
       let toastTitle = "Operation Failed";
       let toastDescription = errorMessage;
 
-      if (String(errorMessage).includes("saveInvoiceMetadata")) {
+      if (String(errorMessage).toLowerCase().includes("gateway timeout") || String(errorMessage).toLowerCase().includes("504")) {
+        toastTitle = "AI Processing Timeout";
+        toastDescription = "The AI model took too long to process the invoice. Please try a smaller file or try again later.";
+      } else if (String(errorMessage).includes("saveInvoiceMetadata")) {
         toastTitle = "Saving Data Failed";
         toastDescription = `Could not save invoice details to Firestore: ${errorMessage}`;
       } else if (String(errorMessage).includes("extractInvoiceData")) {
@@ -162,6 +172,7 @@ export function InvoiceUploadForm({ onExtractionSuccess, setGlobalLoading, setGl
         toastTitle = "File Upload Failed";
         toastDescription = `Could not upload file: ${errorMessage}`;
       }
+
 
       toast({
         title: toastTitle,
@@ -215,3 +226,4 @@ export function InvoiceUploadForm({ onExtractionSuccess, setGlobalLoading, setGl
     </Card>
   );
 }
+
