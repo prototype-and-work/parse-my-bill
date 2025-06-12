@@ -49,45 +49,60 @@ export async function saveInvoiceMetadata(
 
 
   if (!userId) {
-    console.error('[invoiceService] Error: User ID is required to save invoice metadata.');
-    throw new Error('User ID is required to save invoice metadata.');
+    const errorMsg = 'User ID is required to save invoice metadata.';
+    console.error(`[invoiceService] Error: ${errorMsg}`);
+    throw new Error(errorMsg);
   }
   if (!fileDownloadUrl) {
-    console.error('[invoiceService] Error: File Download URL is required.');
-    throw new Error('File Download URL is required to save invoice metadata.');
+    const errorMsg = 'File Download URL is required to save invoice metadata.';
+    console.error(`[invoiceService] Error: ${errorMsg}`);
+    throw new Error(errorMsg);
   }
    if (!filePath) {
-    console.error('[invoiceService] Error: File Path is required.');
-    throw new Error('File Path is required to save invoice metadata.');
+    const errorMsg = 'File Path is required to save invoice metadata.';
+    console.error(`[invoiceService] Error: ${errorMsg}`);
+    throw new Error(errorMsg);
   }
 
   try {
     // Construct docData ensuring undefined fields from extractedData are omitted
-    const docData: StoredInvoiceData = {
+    const docData: Omit<StoredInvoiceData, 'createdAt' | 'updatedAt'> & { createdAt?: FieldValue; updatedAt?: FieldValue } = {
       userId: userId,
       fileName: fileName,
       fileDownloadUrl: fileDownloadUrl,
       filePath: filePath,
-      createdAt: serverTimestamp(),
-      updatedAt: serverTimestamp(),
       // Conditionally add optional fields only if they are defined
       ...(extractedData.invoiceNumber !== undefined && { invoiceNumber: extractedData.invoiceNumber }),
       ...(extractedData.invoiceDate !== undefined && { invoiceDate: extractedData.invoiceDate }),
       ...(extractedData.lineItems !== undefined && { lineItems: extractedData.lineItems }),
       ...(extractedData.totalAmount !== undefined && { totalAmount: extractedData.totalAmount }),
     };
+    
+    const finalDocData = {
+        ...docData,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+    };
 
-    console.log('[invoiceService] Document data to be saved:', JSON.stringify(docData, null, 2));
+    // Log the data just before saving,FieldValue will appear as objects but are handled by Firestore
+    console.log('[invoiceService] Document data to be saved (timestamps will be processed by Firestore):', JSON.stringify(finalDocData, null, 2));
 
-    const docRef = await addDoc(collection(db, INVOICES_COLLECTION), docData);
+    const docRef = await addDoc(collection(db, INVOICES_COLLECTION), finalDocData);
     console.log('[invoiceService] Successfully saved metadata to Firestore. Document ID:', docRef.id);
     return { id: docRef.id };
-  } catch (e) {
-    console.error('[invoiceService] Error saving invoice metadata to Firestore: ', e);
+  } catch (e: any) { // Catch as 'any' or 'unknown' then check instance
+    let errorMessage = 'Failed to save invoice metadata due to an unknown error.';
     if (e instanceof Error) {
-      throw new Error(`Failed to save invoice metadata: ${e.message}`);
+      errorMessage = `Failed to save invoice metadata: ${e.message}`;
+    } else if (typeof e === 'string') {
+      errorMessage = `Failed to save invoice metadata: ${e}`;
+    } else if (e && typeof e.toString === 'function') {
+      errorMessage = `Failed to save invoice metadata: ${e.toString()}`;
     }
-    throw new Error('Failed to save invoice metadata due to an unknown error.');
+    
+    console.error('[invoiceService] Error saving invoice metadata to Firestore. Full error object:', e);
+    console.error(`[invoiceService] Constructed error message: ${errorMessage}`);
+    throw new Error(errorMessage); // Re-throw a simple Error object with a string message
   }
 }
 
@@ -102,18 +117,40 @@ export async function updateInvoiceInFirestore(
     
     // Construct the update payload, ensuring undefined values are not sent
     const updatePayload: { [key: string]: any } = { updatedAt: serverTimestamp() };
-    if (dataToUpdate.invoiceNumber !== undefined) updatePayload.invoiceNumber = dataToUpdate.invoiceNumber;
-    if (dataToUpdate.invoiceDate !== undefined) updatePayload.invoiceDate = dataToUpdate.invoiceDate;
-    if (dataToUpdate.lineItems !== undefined) updatePayload.lineItems = dataToUpdate.lineItems;
-    if (dataToUpdate.totalAmount !== undefined) updatePayload.totalAmount = dataToUpdate.totalAmount;
+
+    // Only include fields if they are explicitly provided in dataToUpdate and not undefined
+    if (dataToUpdate.hasOwnProperty('invoiceNumber')) {
+      if (dataToUpdate.invoiceNumber !== undefined) updatePayload.invoiceNumber = dataToUpdate.invoiceNumber;
+      else updatePayload.invoiceNumber = null; // Or FieldValue.delete() if you want to remove it
+    }
+    if (dataToUpdate.hasOwnProperty('invoiceDate')) {
+      if (dataToUpdate.invoiceDate !== undefined) updatePayload.invoiceDate = dataToUpdate.invoiceDate;
+      else updatePayload.invoiceDate = null;
+    }
+    if (dataToUpdate.hasOwnProperty('lineItems')) {
+        if (dataToUpdate.lineItems !== undefined) updatePayload.lineItems = dataToUpdate.lineItems;
+        else updatePayload.lineItems = null; 
+    }
+    if (dataToUpdate.hasOwnProperty('totalAmount')) {
+      if (dataToUpdate.totalAmount !== undefined) updatePayload.totalAmount = dataToUpdate.totalAmount;
+      else updatePayload.totalAmount = null;
+    }
+
 
     await updateDoc(invoiceDocRef, updatePayload);
     console.log(`[invoiceService] Successfully updated document ${documentId} in Firestore.`);
-  } catch (e) {
-    console.error(`[invoiceService] Error updating document ${documentId} in Firestore: `, e);
+  } catch (e: any) {
+    let errorMessage = 'Failed to update invoice data in Firestore due to an unknown error.';
      if (e instanceof Error) {
-      throw new Error(`Failed to update invoice data in Firestore: ${e.message}`);
+      errorMessage = `Failed to update invoice data in Firestore: ${e.message}`;
+    } else if (typeof e === 'string') {
+      errorMessage = `Failed to update invoice data in Firestore: ${e}`;
+    } else if (e && typeof e.toString === 'function') {
+        errorMessage = `Failed to update invoice data in Firestore: ${e.toString()}`;
     }
-    throw new Error('Failed to update invoice data in Firestore due to an unknown error.');
+    console.error(`[invoiceService] Error updating document ${documentId} in Firestore. Full error object:`, e);
+    console.error(`[invoiceService] Constructed error message for update: ${errorMessage}`);
+    throw new Error(errorMessage);
   }
 }
+
