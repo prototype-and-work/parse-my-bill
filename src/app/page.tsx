@@ -7,7 +7,6 @@ import { useAuth } from '@/contexts/AuthContext';
 import { AppHeader } from '@/components/AppHeader';
 import { InvoiceUploadForm } from '@/components/InvoiceUploadForm';
 import { InvoiceDataDisplay } from '@/components/InvoiceDataDisplay';
-// Ensure this uses the potentially simplified ExtractInvoiceDataOutput
 import type { ExtractInvoiceDataOutput } from '@/ai/flows/extract-invoice-data';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { Alert, AlertDescription, AlertTitle } from "@/components/ui/alert";
@@ -18,7 +17,6 @@ export default function HomePage() {
   const router = useRouter();
 
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
-  // State type updated to potentially simplified ExtractInvoiceDataOutput
   const [extractedData, setExtractedData] = useState<ExtractInvoiceDataOutput | null>(null);
   const [isLoading, setIsLoading] = useState(false); 
   const [error, setError] = useState<string | null>(null);
@@ -31,22 +29,20 @@ export default function HomePage() {
     }
   }, [user, authLoading, router]);
 
-  // Callback type updated for potentially simplified data
   const handleExtractionSuccess = (
     data: ExtractInvoiceDataOutput, 
     file: File, 
     saveResult: { id: string; fileDownloadUrl: string; filePath: string; }
   ) => {
-    setExtractedData(data); // data is now potentially simplified
+    setExtractedData(data); 
     setUploadedFile(file);
     setFirestoreDocumentId(saveResult.id);
     setFileDownloadUrl(saveResult.fileDownloadUrl);
     setError(null);
   };
 
-  // Callback type updated for potentially simplified data
   const handleDataUpdate = (updatedData: ExtractInvoiceDataOutput) => {
-    setExtractedData(updatedData); // updatedData is potentially simplified
+    setExtractedData(updatedData); 
   };
 
   if (authLoading || !user) {
@@ -101,7 +97,7 @@ export default function HomePage() {
 
         {extractedData && firestoreDocumentId && !isLoading && !error && (
           <InvoiceDataDisplay
-            initialData={extractedData} // Pass the potentially simplified data
+            initialData={extractedData} 
             onDataUpdate={handleDataUpdate}
             uploadedFileName={uploadedFile?.name}
             firestoreDocumentId={firestoreDocumentId}

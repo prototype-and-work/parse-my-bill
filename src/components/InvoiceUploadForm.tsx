@@ -122,13 +122,7 @@ export function InvoiceUploadForm({ onExtractionSuccess, setGlobalLoading, setGl
       toast({ title: "Step 3/3: Saving Data...", description: "Saving invoice details to the cloud." });
       
       const metadataToSave = {
-        // Ensure this matches the potentially simplified ExtractInvoiceDataOutput
-        extractedData: {
-            invoiceNumber: extractedDataResponse.invoiceNumber ?? "N/A",
-            // invoiceDate: extractedDataResponse.invoiceDate ?? "N/A", // Temporarily removed
-            // lineItems: extractedDataResponse.lineItems ?? [], // Temporarily removed
-            totalAmount: extractedDataResponse.totalAmount ?? 0,
-        },
+        extractedData: extractedDataResponse, // Full schema
         fileName: selectedFile.name,
         fileDownloadUrl: uploadResult.downloadURL,
         filePath: uploadResult.filePath,
@@ -140,7 +134,6 @@ export function InvoiceUploadForm({ onExtractionSuccess, setGlobalLoading, setGl
       console.log('[InvoiceUploadForm] Step 3/3: Firestore save result:', firestoreSaveResult);
       
       if (firestoreSaveResult && firestoreSaveResult.id) {
-        // Pass the original extractedDataResponse which might be simplified
         onExtractionSuccess(extractedDataResponse, selectedFile, { id: firestoreSaveResult.id, fileDownloadUrl: uploadResult.downloadURL, filePath: uploadResult.filePath });
         toast({
           title: "Operation Successful",
@@ -226,4 +219,3 @@ export function InvoiceUploadForm({ onExtractionSuccess, setGlobalLoading, setGl
     </Card>
   );
 }
-

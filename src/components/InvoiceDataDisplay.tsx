@@ -3,7 +3,6 @@
 
 import type { ChangeEvent } from "react";
 import { useState, useEffect } from 'react';
-// Ensure this uses the potentially simplified ExtractInvoiceDataOutput for type consistency
 import type { ExtractInvoiceDataOutput } from '@/ai/flows/extract-invoice-data';
 import { updateInvoiceInFirestore } from '@/services/invoiceService';
 import { Button } from "@/components/ui/button";
@@ -17,7 +16,7 @@ import { useToast } from "@/hooks/use-toast";
 import { Textarea } from "@/components/ui/textarea";
 
 interface InvoiceDataDisplayProps {
-  initialData: ExtractInvoiceDataOutput; // This will be the simplified version
+  initialData: ExtractInvoiceDataOutput; 
   onDataUpdate: (updatedData: ExtractInvoiceDataOutput) => void;
   uploadedFileName?: string;
   firestoreDocumentId: string | null;
@@ -25,11 +24,10 @@ interface InvoiceDataDisplayProps {
 }
 
 export function InvoiceDataDisplay({ initialData, onDataUpdate, uploadedFileName, firestoreDocumentId, fileDownloadUrl }: InvoiceDataDisplayProps) {
-  // Initialize with potentially simplified data
   const [editableData, setEditableData] = useState<ExtractInvoiceDataOutput>({
     invoiceNumber: initialData.invoiceNumber ?? "",
-    // invoiceDate: initialData.invoiceDate ?? "", // Handle if missing
-    // lineItems: initialData.lineItems ?? [], // Handle if missing
+    invoiceDate: initialData.invoiceDate ?? "", 
+    lineItems: initialData.lineItems ?? [], 
     totalAmount: initialData.totalAmount ?? 0,
   });
   const { toast } = useToast();
@@ -37,8 +35,8 @@ export function InvoiceDataDisplay({ initialData, onDataUpdate, uploadedFileName
   useEffect(() => {
     setEditableData({
         invoiceNumber: initialData.invoiceNumber ?? "",
-        // invoiceDate: initialData.invoiceDate ?? "",
-        // lineItems: initialData.lineItems ?? [],
+        invoiceDate: initialData.invoiceDate ?? "",
+        lineItems: initialData.lineItems ?? [],
         totalAmount: initialData.totalAmount ?? 0,
     });
   }, [initialData]);
@@ -52,13 +50,13 @@ export function InvoiceDataDisplay({ initialData, onDataUpdate, uploadedFileName
   };
   
   const handleLineItemChange = (index: number, field: 'description' | 'amount', value: string | number) => {
-    // if (!editableData.lineItems) return; // Guard against missing lineItems
-    // const updatedLineItems = [...editableData.lineItems];
-    // updatedLineItems[index] = {
-    //   ...updatedLineItems[index],
-    //   [field]: field === 'amount' ? parseFloat(value as string) || 0 : value,
-    // };
-    // setEditableData(prev => ({ ...prev, lineItems: updatedLineItems }));
+    if (!editableData.lineItems) return; 
+    const updatedLineItems = [...editableData.lineItems];
+    updatedLineItems[index] = {
+      ...updatedLineItems[index],
+      [field]: field === 'amount' ? parseFloat(value as string) || 0 : value,
+    };
+    setEditableData(prev => ({ ...prev, lineItems: updatedLineItems }));
   };
 
 
@@ -72,9 +70,8 @@ export function InvoiceDataDisplay({ initialData, onDataUpdate, uploadedFileName
       return;
     }
     try {
-      // Pass the current editableData which is of simplified type
       await updateInvoiceInFirestore(firestoreDocumentId, editableData);
-      onDataUpdate(editableData); // Notify parent with simplified data
+      onDataUpdate(editableData); 
       toast({
         title: "Data Updated & Saved",
         description: "Invoice details have been updated and saved to Firestore.",
@@ -127,7 +124,7 @@ export function InvoiceDataDisplay({ initialData, onDataUpdate, uploadedFileName
                 className="bg-background/70"
               />
             </div>
-            {/* <div className="space-y-1">
+            <div className="space-y-1">
               <Label htmlFor="invoiceDate">Invoice Date</Label>
                <Input
                 id="invoiceDate"
@@ -136,7 +133,7 @@ export function InvoiceDataDisplay({ initialData, onDataUpdate, uploadedFileName
                 onChange={handleInputChange}
                 className="bg-background/70"
               />
-            </div> */}
+            </div>
             <div className="space-y-1 md:col-span-2">
               <Label htmlFor="totalAmount">Total Amount</Label>
               <Input
@@ -151,7 +148,7 @@ export function InvoiceDataDisplay({ initialData, onDataUpdate, uploadedFileName
           </div>
         </div>
 
-        {/* <div>
+        <div>
           <h3 className="text-lg font-semibold mb-3 font-headline flex items-center">
             <CircleDollarSign className="mr-2 h-5 w-5 text-primary" />
             Line Items
@@ -195,7 +192,7 @@ export function InvoiceDataDisplay({ initialData, onDataUpdate, uploadedFileName
               </TableBody>
             </Table>
           </div>
-        </div> */}
+        </div>
         
         <Accordion type="single" collapsible className="w-full">
           <AccordionItem value="item-1">
