@@ -14,7 +14,6 @@ export interface StoredInvoiceData {
   filePath: string;
   createdAt: FieldValue;
   updatedAt: FieldValue;
-  // Fields from ExtractInvoiceDataOutput
   invoiceNumber?: string;
   invoiceDate?: string;
   lineItems?: { description: string; amount: number }[];
@@ -29,6 +28,12 @@ export interface FetchedStoredInvoiceData extends Omit<StoredInvoiceData, 'creat
 }
 
 
+// This function is no longer called by InvoiceUploadForm for CREATING invoices,
+// as that logic has moved to the client-side.
+// It's kept here for potential future use or as a reference.
+// IMPORTANT: If you decide to use this server action again for creating invoices,
+// ensure it handles authentication and authorization appropriately, as server actions
+// don't automatically carry the client's Firebase auth context in the same way.
 interface SaveInvoiceMetadataParams {
   extractedData: ExtractInvoiceDataOutput;
   fileName: string;
@@ -41,28 +46,27 @@ export async function saveInvoiceMetadata(
   { extractedData, fileName, fileDownloadUrl, filePath, userId }: SaveInvoiceMetadataParams
 ): Promise<{ id: string }> {
   console.log('############################################################');
-  console.log('--- [invoiceService] saveInvoiceMetadata: EXECUTION START ---');
+  console.log('--- [invoiceService] saveInvoiceMetadata (SERVER ACTION): EXECUTION START ---');
   console.log('############################################################');
-  console.log('[invoiceService] Input - User ID:', userId);
-  console.log('[invoiceService] Input - FileName:', fileName);
-  console.log('[invoiceService] Input - FileDownloadUrl:', fileDownloadUrl);
-  console.log('[invoiceService] Input - FilePath:', filePath);
-  console.log('[invoiceService] Input - ExtractedData:', JSON.stringify(extractedData, null, 2));
-
+  console.log('[invoiceService] (SERVER ACTION) Input - User ID:', userId);
+  console.log('[invoiceService] (SERVER ACTION) Input - FileName:', fileName);
+  console.log('[invoiceService] (SERVER ACTION) Input - FileDownloadUrl:', fileDownloadUrl);
+  console.log('[invoiceService] (SERVER ACTION) Input - FilePath:', filePath);
+  console.log('[invoiceService] (SERVER ACTION) Input - ExtractedData:', JSON.stringify(extractedData, null, 2));
 
   if (!userId) {
     const errorMsg = 'User ID is required to save invoice metadata.';
-    console.error(`[invoiceService] Error: ${errorMsg}`);
+    console.error(`[invoiceService] (SERVER ACTION) Error: ${errorMsg}`);
     throw new Error(errorMsg);
   }
-  if (!fileDownloadUrl) {
+   if (!fileDownloadUrl) {
     const errorMsg = 'File Download URL is required to save invoice metadata.';
-    console.error(`[invoiceService] Error: ${errorMsg}`);
+    console.error(`[invoiceService] (SERVER ACTION) Error: ${errorMsg}`);
     throw new Error(errorMsg);
   }
    if (!filePath) {
     const errorMsg = 'File Path is required to save invoice metadata.';
-    console.error(`[invoiceService] Error: ${errorMsg}`);
+    console.error(`[invoiceService] (SERVER ACTION) Error: ${errorMsg}`);
     throw new Error(errorMsg);
   }
 
@@ -72,11 +76,21 @@ export async function saveInvoiceMetadata(
       fileName: fileName,
       fileDownloadUrl: fileDownloadUrl,
       filePath: filePath,
-      ...(extractedData.invoiceNumber !== undefined && { invoiceNumber: extractedData.invoiceNumber }),
-      ...(extractedData.invoiceDate !== undefined && { invoiceDate: extractedData.invoiceDate }),
-      ...(extractedData.lineItems !== undefined && { lineItems: extractedData.lineItems }),
-      ...(extractedData.totalAmount !== undefined && { totalAmount: extractedData.totalAmount }),
     };
+    
+    // Conditionally add optional fields from extractedData
+    if (extractedData.invoiceNumber !== undefined) {
+      docData.invoiceNumber = extractedData.invoiceNumber;
+    }
+    if (extractedData.invoiceDate !== undefined) {
+      docData.invoiceDate = extractedData.invoiceDate;
+    }
+    if (extractedData.lineItems !== undefined) {
+      docData.lineItems = extractedData.lineItems;
+    }
+    if (extractedData.totalAmount !== undefined) {
+      docData.totalAmount = extractedData.totalAmount;
+    }
     
     const finalDocData = {
         ...docData,
@@ -84,17 +98,17 @@ export async function saveInvoiceMetadata(
         updatedAt: serverTimestamp(),
     };
 
-    console.log('[invoiceService] Document data to be saved (timestamps will be processed by Firestore):', JSON.stringify(finalDocData, null, 2));
+    console.log('[invoiceService] (SERVER ACTION) Document data to be saved (timestamps will be processed by Firestore):', JSON.stringify(finalDocData, null, 2));
 
     const docRef = await addDoc(collection(db, INVOICES_COLLECTION), finalDocData);
-    console.log('[invoiceService] Successfully saved metadata to Firestore. Document ID:', docRef.id);
+    console.log('[invoiceService] (SERVER ACTION) Successfully saved metadata to Firestore. Document ID:', docRef.id);
     console.log('############################################################');
-    console.log('--- [invoiceService] saveInvoiceMetadata: EXECUTION SUCCESS ---');
+    console.log('--- [invoiceService] saveInvoiceMetadata (SERVER ACTION): EXECUTION SUCCESS ---');
     console.log('############################################################');
     return { id: docRef.id };
   } catch (e: any) {
     console.error('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!');
-    console.error('--- [invoiceService] saveInvoiceMetadata: EXECUTION ERROR ---');
+    console.error('--- [invoiceService] saveInvoiceMetadata (SERVER ACTION): EXECUTION ERROR ---');
     console.error('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!');
     let errorMessage = 'Failed to save invoice metadata due to an unknown error.';
     if (e instanceof Error) {
@@ -105,8 +119,8 @@ export async function saveInvoiceMetadata(
       errorMessage = `Failed to save invoice metadata: ${e.toString()}`;
     }
     
-    console.error('[invoiceService] Firestore Save Error - Full Error Object:', e);
-    console.error(`[invoiceService] Firestore Save Error - Constructed Message: ${errorMessage}`);
+    console.error('[invoiceService] (SERVER ACTION) Firestore Save Error - Full Error Object:', e);
+    console.error(`[invoiceService] (SERVER ACTION) Firestore Save Error - Constructed Message: ${errorMessage}`);
     console.error('!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!!');
     throw new Error(errorMessage);
   }

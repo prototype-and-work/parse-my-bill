@@ -9,11 +9,12 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { UploadCloud, Loader2 } from "lucide-react";
 import { extractInvoiceData, type ExtractInvoiceDataOutput } from '@/ai/flows/extract-invoice-data';
-import { saveInvoiceMetadata } from '@/services/invoiceService'; 
 import { useToast } from "@/hooks/use-toast";
 import { useAuth } from "@/contexts/AuthContext";
-import { storage } from '@/config/firebase'; 
+import { storage, db } from '@/config/firebase'; 
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage'; 
+import { collection, addDoc, serverTimestamp, type FieldValue } from 'firebase/firestore';
+import type { StoredInvoiceData } from '@/services/invoiceService'; // For type consistency
 
 interface InvoiceUploadFormProps {
   onExtractionSuccess: (
@@ -119,44 +120,47 @@ export function InvoiceUploadForm({ onExtractionSuccess, setGlobalLoading, setGl
       toast({ title: "Step 2/3: AI Data Extracted!", description: "Invoice content has been parsed." });
       console.log('[InvoiceUploadForm] Step 2/3: Data extraction successful. Response:', extractedDataResponse);
       
-      // 3. Save metadata to Firestore via server action
-      console.log('[InvoiceUploadForm] Step 3/3: Preparing to save metadata to Firestore...');
+      // 3. Save metadata to Firestore (Client-Side)
+      console.log('[InvoiceUploadForm] Step 3/3: Preparing to save metadata to Firestore (client-side)...');
       toast({ title: "Step 3/3: Saving Data...", description: "Saving invoice details to the cloud." });
       
-      const metadataToSave = {
-        extractedData: extractedDataResponse, 
+      const docDataToSave: Omit<StoredInvoiceData, 'createdAt' | 'updatedAt'> & { createdAt?: FieldValue; updatedAt?: FieldValue } = {
+        userId: user.uid,
         fileName: selectedFile.name,
         fileDownloadUrl: uploadResult.downloadURL,
         filePath: uploadResult.filePath,
-        userId: user.uid
+        ...(extractedDataResponse.invoiceNumber !== undefined && { invoiceNumber: extractedDataResponse.invoiceNumber }),
+        ...(extractedDataResponse.invoiceDate !== undefined && { invoiceDate: extractedDataResponse.invoiceDate }),
+        ...(extractedDataResponse.lineItems !== undefined && { lineItems: extractedDataResponse.lineItems }),
+        ...(extractedDataResponse.totalAmount !== undefined && { totalAmount: extractedDataResponse.totalAmount }),
       };
-      console.log('[InvoiceUploadForm] Metadata to save:', JSON.stringify(metadataToSave, null, 2));
+      
+      const finalDocData = {
+        ...docDataToSave,
+        createdAt: serverTimestamp(),
+        updatedAt: serverTimestamp(),
+      };
+      console.log('[InvoiceUploadForm] Document data to be saved to Firestore (client-side):', JSON.stringify(finalDocData, null, 2));
 
       try {
-        const firestoreSaveResult = await saveInvoiceMetadata(metadataToSave);
-        console.log('[InvoiceUploadForm] Step 3/3: Firestore save result:', firestoreSaveResult);
+        const docRef = await addDoc(collection(db, "invoices"), finalDocData);
+        console.log('[InvoiceUploadForm] Step 3/3: Firestore save successful (client-side). Document ID:', docRef.id);
         
-        if (firestoreSaveResult && firestoreSaveResult.id) {
-          onExtractionSuccess(extractedDataResponse, selectedFile, { id: firestoreSaveResult.id, fileDownloadUrl: uploadResult.downloadURL, filePath: uploadResult.filePath });
-          toast({
-            title: "Operation Successful",
-            description: "Invoice processed and all data saved.",
-          });
-          console.log('[InvoiceUploadForm] Operation fully successful. Firestore ID:', firestoreSaveResult.id);
-        } else {
-          // This case should ideally be caught by an error in saveInvoiceMetadata
-          throw new Error("Failed to save metadata to Firestore. No ID returned or operation failed silently.");
-        }
+        onExtractionSuccess(extractedDataResponse, selectedFile, { id: docRef.id, fileDownloadUrl: uploadResult.downloadURL, filePath: uploadResult.filePath });
+        toast({
+          title: "Operation Successful",
+          description: "Invoice processed and all data saved.",
+        });
+        console.log('[InvoiceUploadForm] Operation fully successful (client-side Firestore). Firestore ID:', docRef.id);
       } catch (saveError) {
-        console.error("[InvoiceUploadForm] Error during Step 3/3 (Saving to Firestore):", saveError);
+        console.error("[InvoiceUploadForm] Error during Step 3/3 (Saving to Firestore client-side):", saveError);
         const saveErrorMessage = saveError instanceof Error ? saveError.message : "An unknown error occurred while saving to Firestore.";
         setGlobalError(`Saving to Firestore failed: ${saveErrorMessage}`);
         toast({
-          title: "Saving Data Failed",
+          title: "Saving Data Failed (Client-Side)",
           description: `Could not save invoice details to Firestore: ${saveErrorMessage}`,
           variant: "destructive",
         });
-        // No re-throw here, outer catch will handle final cleanup
       }
 
     } catch (error) {
@@ -176,13 +180,11 @@ export function InvoiceUploadForm({ onExtractionSuccess, setGlobalLoading, setGl
         toastTitle = "File Upload Failed";
         toastDescription = `Could not upload file: ${errorMessage}`;
       }
-      // If saveInvoiceMetadata was the source, it might have already set a more specific toast.
-      // Only set global error if not already more specifically set by inner catch.
+      
       if (!String(errorMessage).includes("Saving to Firestore failed")) {
          setGlobalError(`Operation failed: ${toastDescription}`);
       }
       
-      // Avoid duplicate toasts if already handled by inner try-catch for Firestore save
       if (!toastTitle.includes("Saving Data Failed")) {
         toast({
             title: toastTitle,
@@ -237,4 +239,3 @@ export function InvoiceUploadForm({ onExtractionSuccess, setGlobalLoading, setGl
     </Card>
   );
 }
-
