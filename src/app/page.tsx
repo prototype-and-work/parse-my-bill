@@ -18,7 +18,7 @@ export default function HomePage() {
 
   const [uploadedFile, setUploadedFile] = useState<File | null>(null);
   const [extractedData, setExtractedData] = useState<ExtractInvoiceDataOutput | null>(null);
-  const [isLoading, setIsLoading] = useState(false); // For invoice processing
+  const [isLoading, setIsLoading] = useState(false); 
   const [error, setError] = useState<string | null>(null);
   const [firestoreDocumentId, setFirestoreDocumentId] = useState<string | null>(null);
   const [fileDownloadUrl, setFileDownloadUrl] = useState<string | null>(null);
@@ -37,7 +37,7 @@ export default function HomePage() {
     setExtractedData(data);
     setUploadedFile(file);
     setFirestoreDocumentId(saveResult.id);
-    setFileDownloadUrl(saveResult.fileDownloadUrl);
+    setFileDownloadUrl(saveResult.fileDownloadUrl); // Set the download URL
     setError(null);
   };
 
@@ -78,7 +78,7 @@ export default function HomePage() {
           <Card className="shadow-md animate-pulse">
             <CardHeader>
               <CardTitle className="font-headline text-xl">Processing Invoice</CardTitle>
-              <CardDescription>AI is extracting data, uploading file, and saving to cloud, please wait...</CardDescription>
+              <CardDescription>Uploading file, AI extracting data, and saving to cloud. Please wait...</CardDescription>
             </CardHeader>
             <CardContent className="flex flex-col items-center justify-center h-40">
               <Loader2 className="h-12 w-12 text-primary animate-spin" />
@@ -101,7 +101,7 @@ export default function HomePage() {
             onDataUpdate={handleDataUpdate}
             uploadedFileName={uploadedFile?.name}
             firestoreDocumentId={firestoreDocumentId}
-            fileDownloadUrl={fileDownloadUrl ?? undefined}
+            fileDownloadUrl={fileDownloadUrl ?? undefined} // Pass the download URL
           />
         )}
 

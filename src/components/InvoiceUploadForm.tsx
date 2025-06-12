@@ -9,9 +9,11 @@ import { Label } from "@/components/ui/label";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
 import { UploadCloud, Loader2 } from "lucide-react";
 import { extractInvoiceData, type ExtractInvoiceDataOutput } from '@/ai/flows/extract-invoice-data';
-import { saveInitialInvoice } from '@/services/invoiceService';
+import { saveInvoiceMetadata } from '@/services/invoiceService'; // Renamed from saveInitialInvoice
 import { useToast } from "@/hooks/use-toast";
-import { useAuth } from "@/contexts/AuthContext"; // Import useAuth
+import { useAuth } from "@/contexts/AuthContext";
+import { storage } from '@/config/firebase'; // Import storage
+import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage'; // Import Firebase storage functions
 
 interface InvoiceUploadFormProps {
   onExtractionSuccess: (
@@ -36,11 +38,31 @@ const fileToDataUri = (file: File): Promise<string> => {
   });
 };
 
+// Client-side file upload function
+async function uploadInvoiceFileClientSide(file: File, userId: string): Promise<{ downloadURL: string; filePath: string }> {
+  const uniqueFileName = `${new Date().getTime()}_${file.name}`;
+  const fullStoragePath = `users/${userId}/invoices/${uniqueFileName}`;
+  const fileReference = storageRef(storage, fullStoragePath);
+
+  try {
+    await uploadBytes(fileReference, file);
+    const downloadURL = await getDownloadURL(fileReference);
+    return { downloadURL, filePath: fullStoragePath };
+  } catch (e) {
+    console.error('Error uploading file to Firebase Storage (client-side): ', e);
+    if (e instanceof Error) {
+      throw new Error(`Client-side upload failed: ${e.message}`);
+    }
+    throw new Error('Client-side upload failed due to an unknown error.');
+  }
+}
+
+
 export function InvoiceUploadForm({ onExtractionSuccess, setGlobalLoading, setGlobalError }: InvoiceUploadFormProps) {
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isProcessing, setIsProcessing] = useState(false);
   const { toast } = useToast();
-  const { user } = useAuth(); // Get the authenticated user
+  const { user } = useAuth();
 
   const handleFileChange = (event: ChangeEvent<HTMLInputElement>) => {
     if (event.target.files && event.target.files[0]) {
@@ -60,7 +82,7 @@ export function InvoiceUploadForm({ onExtractionSuccess, setGlobalLoading, setGl
       return;
     }
 
-    if (!user || !user.uid) { // Check if user is available
+    if (!user || !user.uid) {
       toast({
         title: "Authentication Error",
         description: "You must be logged in to upload an invoice.",
@@ -75,17 +97,33 @@ export function InvoiceUploadForm({ onExtractionSuccess, setGlobalLoading, setGl
     setGlobalError(null);
 
     try {
+      // 1. Upload file client-side
+      toast({ title: "Step 1/3: Uploading File...", description: "Please wait while the file is uploaded." });
+      const { downloadURL, filePath } = await uploadInvoiceFileClientSide(selectedFile, user.uid);
+      toast({ title: "Step 1/3: Upload Successful!", description: `File ${selectedFile.name} uploaded.` });
+
+      // 2. Extract data using Genkit
+      toast({ title: "Step 2/3: Extracting Data...", description: "AI is processing the invoice." });
       const invoiceDataUri = await fileToDataUri(selectedFile);
       const extractedDataResponse = await extractInvoiceData({ invoiceDataUri });
+      toast({ title: "Step 2/3: Data Extracted!", description: "Invoice content has been parsed." });
       
-      // Pass user.uid to saveInitialInvoice
-      const saveResult = await saveInitialInvoice(extractedDataResponse, selectedFile, user.uid);
+      // 3. Save metadata to Firestore via server action
+      toast({ title: "Step 3/3: Saving Data...", description: "Saving invoice details to the cloud." });
+      const firestoreSaveResult = await saveInvoiceMetadata({
+        extractedData: extractedDataResponse,
+        fileName: selectedFile.name,
+        fileDownloadUrl: downloadURL,
+        filePath: filePath,
+        userId: user.uid
+      });
       
-      onExtractionSuccess(extractedDataResponse, selectedFile, saveResult);
+      onExtractionSuccess(extractedDataResponse, selectedFile, { id: firestoreSaveResult.id, fileDownloadUrl: downloadURL, filePath: filePath });
       toast({
         title: "Operation Successful",
-        description: "Invoice data extracted, file uploaded, and all saved to cloud.",
+        description: "Invoice processed and all data saved.",
       });
+
     } catch (error) {
       console.error("Operation failed:", error);
       const errorMessage = error instanceof Error ? error.message : "An unknown error occurred during processing, upload, or saving.";
@@ -127,7 +165,7 @@ export function InvoiceUploadForm({ onExtractionSuccess, setGlobalLoading, setGl
             {isProcessing ? (
               <>
                 <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                Processing, Uploading & Saving...
+                Processing...
               </>
             ) : (
               <>
