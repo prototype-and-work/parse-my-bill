@@ -14,7 +14,7 @@ import { useAuth } from "@/contexts/AuthContext";
 import { storage, db } from '@/config/firebase'; 
 import { ref as storageRef, uploadBytes, getDownloadURL } from 'firebase/storage'; 
 import { collection, addDoc, serverTimestamp, type FieldValue } from 'firebase/firestore';
-import type { StoredInvoiceData } from '@/services/invoiceService'; // For type consistency
+import type { StoredInvoiceData } from '@/services/invoiceService';
 
 interface InvoiceUploadFormProps {
   onExtractionSuccess: (
@@ -118,7 +118,7 @@ export function InvoiceUploadForm({ onExtractionSuccess, setGlobalLoading, setGl
       const invoiceDataUri = await fileToDataUri(selectedFile);
       extractedDataResponse = await extractInvoiceData({ invoiceDataUri });
       toast({ title: "Step 2/3: AI Data Extracted!", description: "Invoice content has been parsed." });
-      console.log('[InvoiceUploadForm] Step 2/3: Data extraction successful. Response:', extractedDataResponse);
+      console.log('[InvoiceUploadForm] Step 2/3: Data extraction successful. Response:', JSON.stringify(extractedDataResponse, null, 2));
       
       // 3. Save metadata to Firestore (Client-Side)
       console.log('[InvoiceUploadForm] Step 3/3: Preparing to save metadata to Firestore (client-side)...');
@@ -129,22 +129,39 @@ export function InvoiceUploadForm({ onExtractionSuccess, setGlobalLoading, setGl
         fileName: selectedFile.name,
         fileDownloadUrl: uploadResult.downloadURL,
         filePath: uploadResult.filePath,
-        ...(extractedDataResponse.invoiceNumber !== undefined && { invoiceNumber: extractedDataResponse.invoiceNumber }),
-        ...(extractedDataResponse.invoiceDate !== undefined && { invoiceDate: extractedDataResponse.invoiceDate }),
-        ...(extractedDataResponse.lineItems !== undefined && { lineItems: extractedDataResponse.lineItems }),
-        ...(extractedDataResponse.totalAmount !== undefined && { totalAmount: extractedDataResponse.totalAmount }),
       };
+      
+      // Conditionally add optional fields from extractedDataResponse to prevent Firestore errors with 'undefined'
+      if (extractedDataResponse.invoiceNumber !== undefined) {
+        docDataToSave.invoiceNumber = extractedDataResponse.invoiceNumber;
+      }
+      if (extractedDataResponse.invoiceDate !== undefined) {
+        docDataToSave.invoiceDate = extractedDataResponse.invoiceDate;
+      }
+      if (extractedDataResponse.lineItems !== undefined && Array.isArray(extractedDataResponse.lineItems)) {
+        // Ensure lineItems are clean (e.g., no undefined amounts/descriptions if schema allows)
+        docDataToSave.lineItems = extractedDataResponse.lineItems.map(item => ({
+            description: item.description ?? "", // Default to empty string if undefined
+            amount: item.amount ?? 0, // Default to 0 if undefined
+        }));
+      } else {
+        docDataToSave.lineItems = []; // Default to empty array if not present or not an array
+      }
+      if (extractedDataResponse.totalAmount !== undefined) {
+        docDataToSave.totalAmount = extractedDataResponse.totalAmount;
+      }
       
       const finalDocData = {
         ...docDataToSave,
         createdAt: serverTimestamp(),
         updatedAt: serverTimestamp(),
       };
+      console.log('[InvoiceUploadForm] Firestore DB instance to be used:', db);
       console.log('[InvoiceUploadForm] Document data to be saved to Firestore (client-side):', JSON.stringify(finalDocData, null, 2));
 
       try {
         const docRef = await addDoc(collection(db, "invoices"), finalDocData);
-        console.log('[InvoiceUploadForm] Step 3/3: Firestore save successful (client-side). Document ID:', docRef.id);
+        console.log("[InvoiceUploadForm] Step 3/3: Firestore save successful (client-side). Document ID:", docRef.id);
         
         onExtractionSuccess(extractedDataResponse, selectedFile, { id: docRef.id, fileDownloadUrl: uploadResult.downloadURL, filePath: uploadResult.filePath });
         toast({
@@ -152,9 +169,11 @@ export function InvoiceUploadForm({ onExtractionSuccess, setGlobalLoading, setGl
           description: "Invoice processed and all data saved.",
         });
         console.log('[InvoiceUploadForm] Operation fully successful (client-side Firestore). Firestore ID:', docRef.id);
-      } catch (saveError) {
+      } catch (saveError: any) {
         console.error("[InvoiceUploadForm] Error during Step 3/3 (Saving to Firestore client-side):", saveError);
-        const saveErrorMessage = saveError instanceof Error ? saveError.message : "An unknown error occurred while saving to Firestore.";
+        console.error("[InvoiceUploadForm] Firestore Save Error Code:", saveError.code);
+        console.error("[InvoiceUploadForm] Firestore Save Error Message:", saveError.message);
+        const saveErrorMessage = saveError.message || "An unknown error occurred while saving to Firestore.";
         setGlobalError(`Saving to Firestore failed: ${saveErrorMessage}`);
         toast({
           title: "Saving Data Failed (Client-Side)",
@@ -185,7 +204,7 @@ export function InvoiceUploadForm({ onExtractionSuccess, setGlobalLoading, setGl
          setGlobalError(`Operation failed: ${toastDescription}`);
       }
       
-      if (!toastTitle.includes("Saving Data Failed")) {
+      if (!toastTitle.includes("Saving Data Failed")) { // Avoid double toast if Firestore save itself failed
         toast({
             title: toastTitle,
             description: toastDescription,
@@ -239,3 +258,4 @@ export function InvoiceUploadForm({ onExtractionSuccess, setGlobalLoading, setGl
     </Card>
   );
 }
+
