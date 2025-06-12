@@ -101,6 +101,8 @@ export function InvoiceUploadForm({ onExtractionSuccess, setGlobalLoading, setGl
     setGlobalError(null);
 
     let uploadResult;
+    let extractedDataResponse;
+
     try {
       // 1. Upload file client-side
       console.log('[InvoiceUploadForm] Step 1/3: Starting file upload...');
@@ -110,11 +112,11 @@ export function InvoiceUploadForm({ onExtractionSuccess, setGlobalLoading, setGl
       console.log('[InvoiceUploadForm] Step 1/3: File upload successful. Result:', uploadResult);
 
       // 2. Extract data using Genkit
-      console.log('[InvoiceUploadForm] Step 2/3: Starting data extraction...');
-      toast({ title: "Step 2/3: Extracting Data...", description: "AI is processing the invoice." });
+      console.log('[InvoiceUploadForm] Step 2/3: Starting data extraction with AI...');
+      toast({ title: "Step 2/3: Extracting Data with AI...", description: "AI is processing the invoice. This may take a moment." });
       const invoiceDataUri = await fileToDataUri(selectedFile);
-      const extractedDataResponse = await extractInvoiceData({ invoiceDataUri });
-      toast({ title: "Step 2/3: Data Extracted!", description: "Invoice content has been parsed." });
+      extractedDataResponse = await extractInvoiceData({ invoiceDataUri });
+      toast({ title: "Step 2/3: AI Data Extracted!", description: "Invoice content has been parsed." });
       console.log('[InvoiceUploadForm] Step 2/3: Data extraction successful. Response:', extractedDataResponse);
       
       // 3. Save metadata to Firestore via server action
@@ -122,7 +124,7 @@ export function InvoiceUploadForm({ onExtractionSuccess, setGlobalLoading, setGl
       toast({ title: "Step 3/3: Saving Data...", description: "Saving invoice details to the cloud." });
       
       const metadataToSave = {
-        extractedData: extractedDataResponse, // Full schema
+        extractedData: extractedDataResponse, 
         fileName: selectedFile.name,
         fileDownloadUrl: uploadResult.downloadURL,
         filePath: uploadResult.filePath,
@@ -130,34 +132,43 @@ export function InvoiceUploadForm({ onExtractionSuccess, setGlobalLoading, setGl
       };
       console.log('[InvoiceUploadForm] Metadata to save:', JSON.stringify(metadataToSave, null, 2));
 
-      const firestoreSaveResult = await saveInvoiceMetadata(metadataToSave);
-      console.log('[InvoiceUploadForm] Step 3/3: Firestore save result:', firestoreSaveResult);
-      
-      if (firestoreSaveResult && firestoreSaveResult.id) {
-        onExtractionSuccess(extractedDataResponse, selectedFile, { id: firestoreSaveResult.id, fileDownloadUrl: uploadResult.downloadURL, filePath: uploadResult.filePath });
+      try {
+        const firestoreSaveResult = await saveInvoiceMetadata(metadataToSave);
+        console.log('[InvoiceUploadForm] Step 3/3: Firestore save result:', firestoreSaveResult);
+        
+        if (firestoreSaveResult && firestoreSaveResult.id) {
+          onExtractionSuccess(extractedDataResponse, selectedFile, { id: firestoreSaveResult.id, fileDownloadUrl: uploadResult.downloadURL, filePath: uploadResult.filePath });
+          toast({
+            title: "Operation Successful",
+            description: "Invoice processed and all data saved.",
+          });
+          console.log('[InvoiceUploadForm] Operation fully successful. Firestore ID:', firestoreSaveResult.id);
+        } else {
+          // This case should ideally be caught by an error in saveInvoiceMetadata
+          throw new Error("Failed to save metadata to Firestore. No ID returned or operation failed silently.");
+        }
+      } catch (saveError) {
+        console.error("[InvoiceUploadForm] Error during Step 3/3 (Saving to Firestore):", saveError);
+        const saveErrorMessage = saveError instanceof Error ? saveError.message : "An unknown error occurred while saving to Firestore.";
+        setGlobalError(`Saving to Firestore failed: ${saveErrorMessage}`);
         toast({
-          title: "Operation Successful",
-          description: "Invoice processed and all data saved.",
+          title: "Saving Data Failed",
+          description: `Could not save invoice details to Firestore: ${saveErrorMessage}`,
+          variant: "destructive",
         });
-         console.log('[InvoiceUploadForm] Operation fully successful. Firestore ID:', firestoreSaveResult.id);
-      } else {
-        throw new Error("Failed to save metadata to Firestore. No ID returned.");
+        // No re-throw here, outer catch will handle final cleanup
       }
 
     } catch (error) {
-      console.error("[InvoiceUploadForm] Operation failed:", error);
+      console.error("[InvoiceUploadForm] Operation failed in main try block:", error);
       const errorMessage = error instanceof Error ? error.message : "An unknown error occurred during processing, upload, or saving.";
-      setGlobalError(`Operation failed: ${errorMessage}`);
       
       let toastTitle = "Operation Failed";
       let toastDescription = errorMessage;
 
-      if (String(errorMessage).toLowerCase().includes("gateway timeout") || String(errorMessage).toLowerCase().includes("504")) {
+      if (String(errorMessage).toLowerCase().includes("gateway timeout") || String(errorMessage).toLowerCase().includes("504") || String(errorMessage).toLowerCase().includes("deadline exceeded")) {
         toastTitle = "AI Processing Timeout";
         toastDescription = "The AI model took too long to process the invoice. Please try a smaller file or try again later.";
-      } else if (String(errorMessage).includes("saveInvoiceMetadata")) {
-        toastTitle = "Saving Data Failed";
-        toastDescription = `Could not save invoice details to Firestore: ${errorMessage}`;
       } else if (String(errorMessage).includes("extractInvoiceData")) {
         toastTitle = "Data Extraction Failed";
         toastDescription = `AI processing failed: ${errorMessage}`;
@@ -165,13 +176,20 @@ export function InvoiceUploadForm({ onExtractionSuccess, setGlobalLoading, setGl
         toastTitle = "File Upload Failed";
         toastDescription = `Could not upload file: ${errorMessage}`;
       }
-
-
-      toast({
-        title: toastTitle,
-        description: toastDescription,
-        variant: "destructive",
-      });
+      // If saveInvoiceMetadata was the source, it might have already set a more specific toast.
+      // Only set global error if not already more specifically set by inner catch.
+      if (!String(errorMessage).includes("Saving to Firestore failed")) {
+         setGlobalError(`Operation failed: ${toastDescription}`);
+      }
+      
+      // Avoid duplicate toasts if already handled by inner try-catch for Firestore save
+      if (!toastTitle.includes("Saving Data Failed")) {
+        toast({
+            title: toastTitle,
+            description: toastDescription,
+            variant: "destructive",
+        });
+      }
     } finally {
       setIsProcessing(false);
       setGlobalLoading(false);
@@ -219,3 +237,4 @@ export function InvoiceUploadForm({ onExtractionSuccess, setGlobalLoading, setGl
     </Card>
   );
 }
+
