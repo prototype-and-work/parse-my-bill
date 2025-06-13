@@ -14,6 +14,7 @@ import { Accordion, AccordionContent, AccordionItem, AccordionTrigger } from "@/
 import { FileText, CalendarDays, CircleDollarSign, Save, FileJson2, ExternalLink } from "lucide-react";
 import { useToast } from "@/hooks/use-toast";
 import { Textarea } from "@/components/ui/textarea";
+import { InvoiceQRCode } from "@/components/InvoiceQRCode";
 
 interface InvoiceDataDisplayProps {
   initialData: ExtractInvoiceDataOutput; 
@@ -194,7 +195,11 @@ export function InvoiceDataDisplay({ initialData, onDataUpdate, uploadedFileName
           </div>
         </div>
         
-        <Accordion type="single" collapsible className="w-full">
+        <div className="mt-6">
+          <InvoiceQRCode invoiceData={editableData} title="Invoice QR Code" />
+        </div>
+
+        <Accordion type="single" collapsible className="w-full mt-6">
           <AccordionItem value="item-1">
             <AccordionTrigger className="text-lg font-semibold font-headline hover:no-underline">
                 <div className="flex items-center">

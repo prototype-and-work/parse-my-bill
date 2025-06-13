@@ -15,15 +15,17 @@ export interface StoredInvoiceData {
   createdAt: FieldValue;
   updatedAt: FieldValue;
   invoiceNumber?: string;
-  invoiceDate?: string;
+  invoiceDate?: Date | null;
   lineItems?: { description: string; amount: number }[];
   totalAmount?: number;
 }
 
-export interface FetchedStoredInvoiceData extends Omit<StoredInvoiceData, 'createdAt' | 'updatedAt' | 'lineItems'> {
+export interface FetchedStoredInvoiceData extends Omit<StoredInvoiceData, 'createdAt' | 'updatedAt'> {
   id: string;
   createdAt: Date;
   updatedAt: Date;
+  description: string;
+  amount: number;
   lineItems?: { description: string; amount: number }[];
 }
 
@@ -82,8 +84,14 @@ export async function saveInvoiceMetadata(
     if (extractedData.invoiceNumber !== undefined) {
       docData.invoiceNumber = extractedData.invoiceNumber;
     }
-    if (extractedData.invoiceDate !== undefined) {
-      docData.invoiceDate = extractedData.invoiceDate;
+    if (extractedData.invoiceDate !== undefined && extractedData.invoiceDate !== null) {
+      const parsedDate = new Date(extractedData.invoiceDate as string | number | Date);
+      if (!isNaN(parsedDate.getTime())) {
+        docData.invoiceDate = parsedDate;
+      } else {
+        console.warn(`[invoiceService] (SERVER ACTION) Invalid invoice date received: "${extractedData.invoiceDate}". It will not be saved.`);
+        // Optionally, set docData.invoiceDate = null; if your Firestore schema allows null for this field.
+      }
     }
     if (extractedData.lineItems !== undefined) {
       docData.lineItems = extractedData.lineItems;

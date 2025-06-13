@@ -131,36 +131,144 @@ export function InvoiceUploadForm({ onExtractionSuccess, setGlobalLoading, setGl
         filePath: uploadResult.filePath,
       };
       
-      // Conditionally add optional fields from extractedDataResponse to prevent Firestore errors with 'undefined'
+      // Conditionally add optional fields from extractedDataResponse, ensuring correct types
       if (extractedDataResponse.invoiceNumber !== undefined) {
         docDataToSave.invoiceNumber = extractedDataResponse.invoiceNumber;
       }
-      if (extractedDataResponse.invoiceDate !== undefined) {
-        docDataToSave.invoiceDate = extractedDataResponse.invoiceDate;
+
+      if (extractedDataResponse.invoiceDate !== undefined && extractedDataResponse.invoiceDate !== null) {
+        // Attempt to parse the invoiceDate. Assumes invoiceDate could be string, number (timestamp), or Date.
+        const parsedDate = new Date(extractedDataResponse.invoiceDate as string | number | Date);
+        if (!isNaN(parsedDate.getTime())) {
+          docDataToSave.invoiceDate = parsedDate; // Firestore client SDK converts Date objects to Timestamps
+        } else {
+          console.warn(`[InvoiceUploadForm] Invalid invoice date received: "${extractedDataResponse.invoiceDate}". It will not be saved.`);
+          // Optionally, set docDataToSave.invoiceDate = null; if your Firestore schema allows null for this field.
+        }
       }
+
       if (extractedDataResponse.lineItems !== undefined && Array.isArray(extractedDataResponse.lineItems)) {
-        // Ensure lineItems are clean (e.g., no undefined amounts/descriptions if schema allows)
-        docDataToSave.lineItems = extractedDataResponse.lineItems.map(item => ({
-            description: item.description ?? "", // Default to empty string if undefined
-            amount: item.amount ?? 0, // Default to 0 if undefined
-        }));
+        docDataToSave.lineItems = extractedDataResponse.lineItems.map(item => {
+          let numericAmount = 0;
+          if (item.amount !== undefined && item.amount !== null) {
+            // Convert item.amount to string before parseFloat to handle numbers and strings uniformly
+            const parsedAmount = parseFloat(String(item.amount)); 
+            if (!isNaN(parsedAmount)) {
+              numericAmount = parsedAmount;
+            } else {
+              console.warn(`[InvoiceUploadForm] Invalid line item amount received: "${item.amount}". Defaulting to 0.`);
+            }
+          }
+          return {
+            description: item.description ?? "",
+            amount: numericAmount,
+          };
+        });
       } else {
-        docDataToSave.lineItems = []; // Default to empty array if not present or not an array
+        docDataToSave.lineItems = [];
       }
-      if (extractedDataResponse.totalAmount !== undefined) {
-        docDataToSave.totalAmount = extractedDataResponse.totalAmount;
+
+      if (extractedDataResponse.totalAmount !== undefined && extractedDataResponse.totalAmount !== null) {
+        // Convert totalAmount to string before parseFloat
+        const numericTotalAmount = parseFloat(String(extractedDataResponse.totalAmount)); 
+        if (!isNaN(numericTotalAmount)) {
+          docDataToSave.totalAmount = numericTotalAmount;
+        } else {
+          console.warn(`[InvoiceUploadForm] Invalid total amount received: "${extractedDataResponse.totalAmount}". It will not be saved.`);
+          // Optionally, set docDataToSave.totalAmount = null or 0, depending on your schema and requirements.
+        }
       }
       
+      // Simplify the data structure to avoid potential Firestore validation issues
+      // Use serverTimestamp() for Firestore timestamp fields
+      
+      // Create a clean object with only the fields we need
       const finalDocData = {
-        ...docDataToSave,
-        createdAt: serverTimestamp(),
-        updatedAt: serverTimestamp(),
+        userId: docDataToSave.userId || '',
+        fileName: docDataToSave.fileName || '',
+        fileDownloadUrl: docDataToSave.fileDownloadUrl || '',
+        filePath: docDataToSave.filePath || '',
+        invoiceNumber: docDataToSave.invoiceNumber || '',
+        // Ensure lineItems are properly formatted
+        lineItems: Array.isArray(docDataToSave.lineItems) 
+          ? docDataToSave.lineItems
+              .filter(item => item !== null && item !== undefined) // Filter out null/undefined items
+              .map(item => ({
+                description: (item.description || '').toString(), // Ensure string
+                amount: typeof item.amount === 'number' && !isNaN(item.amount) ? item.amount : 0
+              })) 
+          : [],
+        totalAmount: typeof docDataToSave.totalAmount === 'number' && !isNaN(docDataToSave.totalAmount) 
+          ? docDataToSave.totalAmount 
+          : 0,
+        // Use serverTimestamp() for Firestore timestamp fields
+        createdAt: serverTimestamp() as FieldValue,
+        updatedAt: serverTimestamp() as FieldValue,
       };
-      console.log('[InvoiceUploadForm] Firestore DB instance to be used:', db);
-      console.log('[InvoiceUploadForm] Document data to be saved to Firestore (client-side):', JSON.stringify(finalDocData, null, 2));
-
+      // console.log('[InvoiceUploadForm] Firestore DB instance to be used:', db);
+      // console.log('[InvoiceUploadForm] Document data to be saved to Firestore (client-side):', JSON.stringify(finalDocData, null, 2));
+      // Log the data we're about to save, but handle potential circular references
+      console.log("[InvoiceUploadForm] Attempting to save data to Firestore");
       try {
-        const docRef = await addDoc(collection(db, "invoices"), finalDocData);
+        // Create a safe copy for logging that won't have circular references
+        const logSafeData = { 
+          ...finalDocData,
+          // Replace serverTimestamp objects with a placeholder for logging
+          createdAt: "[SERVER_TIMESTAMP]",
+          updatedAt: "[SERVER_TIMESTAMP]"
+        };
+        
+        console.log("[InvoiceUploadForm] Attempting to save to Firestore with data:", JSON.stringify(logSafeData, null, 2));
+        
+        let docRef;
+        try {
+          docRef = await addDoc(collection(db, "invoices"), finalDocData);
+        } catch (error: any) { // Using any type for error to access Firebase error properties
+          // Handle specific Firestore errors
+          console.error("[InvoiceUploadForm] Firestore addDoc error:", error);
+          
+          // Force the error to be displayed prominently
+          setGlobalError(`Firestore Error: ${error.message || 'Unknown error saving to database'}`);
+          
+          // More detailed error handling for different Firestore error types
+          let errorTitle = "⚠️ Database Error";
+          let errorDescription = error.message || "Failed to save invoice data";
+          
+          // Check for specific error types
+          if (error.code === "permission-denied") {
+            errorDescription = "You don't have permission to save this data. Please check your login status.";
+          } else if (error.code === "invalid-argument") {
+            errorDescription = "Invalid data format. The invoice data contains unsupported values.";
+          } else if (typeof error.message === 'string') {
+            if (error.message.includes("400") || error.message.includes("Bad Request")) {
+              errorDescription = "The server rejected the data format. Please check for invalid values.";
+            } else if (error.message.includes("quota")) {
+              errorDescription = "Database quota exceeded. Please try again later.";
+            } else if (error.message.includes("network")) {
+              errorDescription = "Network error. Please check your internet connection.";
+            }
+          }
+          
+          // Log detailed error information for debugging
+          console.error("[InvoiceUploadForm] Firestore Error Details:", {
+            code: error.code,
+            message: error.message,
+            name: error.name,
+            stack: error.stack
+          });
+          
+          toast({
+            title: errorTitle,
+            description: errorDescription,
+            variant: "destructive",
+          });
+          
+          // Wait a moment to ensure the toast is visible
+          await new Promise(resolve => setTimeout(resolve, 100));
+          
+          throw error; // Re-throw to be caught by the outer catch block
+        }
+        
         console.log("[InvoiceUploadForm] Step 3/3: Firestore save successful (client-side). Document ID:", docRef.id);
         
         onExtractionSuccess(extractedDataResponse, selectedFile, { id: docRef.id, fileDownloadUrl: uploadResult.downloadURL, filePath: uploadResult.filePath });
@@ -170,6 +278,7 @@ export function InvoiceUploadForm({ onExtractionSuccess, setGlobalLoading, setGl
         });
         console.log('[InvoiceUploadForm] Operation fully successful (client-side Firestore). Firestore ID:', docRef.id);
       } catch (saveError: any) {
+        console.log(saveError);
         console.error("[InvoiceUploadForm] Error during Step 3/3 (Saving to Firestore client-side):", saveError);
         console.error("[InvoiceUploadForm] Firestore Save Error Code:", saveError.code);
         console.error("[InvoiceUploadForm] Firestore Save Error Message:", saveError.message);

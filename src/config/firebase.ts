@@ -13,6 +13,10 @@ const firebaseConfig = {
   appId: process.env.NEXT_PUBLIC_FIREBASE_APP_ID,
 };
 
+
+
+
+
 let app;
 if (!getApps().length) {
   app = initializeApp(firebaseConfig);
@@ -20,7 +24,7 @@ if (!getApps().length) {
   app = getApp();
 }
 
-const db = getFirestore(app);
+const db = getFirestore(app,"parse-my-bill");
 const storage = getStorage(app);
 const auth = getAuth(app);
 
